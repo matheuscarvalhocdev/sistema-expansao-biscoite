@@ -27,3 +27,19 @@ body {
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: var(--color-b-secondary);
 }
+
+
+
+/* --- LIMPEZA DO BALÃO DO LEAFLET (ESTILO GOOGLE MAPS) --- */
+.leaflet-popup-content-wrapper {
+  background: transparent !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+}
+.leaflet-popup-content {
+  margin: 0 !important;
+  width: auto !important;
+}
+.leaflet-popup-tip-container {
+  display: none !important; /* Esconde aquele triângulo pequeno embaixo do balão */
+}

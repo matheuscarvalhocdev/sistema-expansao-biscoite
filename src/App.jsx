@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
-import { LogIn, Plus, X, MapPin, Save, LogOut, Search, Navigation, Bell, ExternalLink, Eye, EyeOff, AlertCircle, ChevronDown } from 'lucide-react';
+import { LogIn, Plus, X, MapPin, Save, LogOut, Search, Navigation, Bell, Eye, EyeOff, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import { locationsData } from './data/locations';
 import L from 'leaflet';
@@ -197,7 +197,7 @@ export default function App() {
             ${isListExpanded ? 'xl:w-[420px] xl:opacity-100' : 'xl:w-0 xl:opacity-0 xl:border-0'}
           `}
         >
-          {/* BOTÃO DE FECHAR/OCULTAR (DENTRO DA LISTA) */}
+          {/* BOTÃO DE FECHAR/OCULTAR */}
           <div 
             onClick={() => setIsListExpanded(false)}
             className="w-full flex justify-center items-center py-4 bg-white/5 cursor-pointer border-b border-b-primary/20 hover:bg-red-500/10 hover:text-red-400 transition-colors xl:py-5 shrink-0 group"
@@ -288,9 +288,23 @@ export default function App() {
                     <div className="p-4 xl:p-5">
                       <h3 className="font-bold text-lg xl:text-xl text-b-light leading-tight mb-2">{local.nome}</h3>
                       <p className="text-xs xl:text-sm text-b-secondary flex items-center gap-2 mb-4 xl:mb-5"><MapPin size={16}/> {local.cidade}</p>
-                      <button onClick={() => window.open(`http://maps.google.com/?q=${local.lat},${local.lng}`, '_blank')} className="w-full py-3 xl:py-4 bg-white/5 hover:bg-b-primary/20 text-b-secondary hover:text-white border border-b-primary/30 rounded-2xl text-xs xl:text-sm font-bold transition-all flex items-center justify-center gap-2">
-                        <ExternalLink size={16} /> ABRIR GPS
-                      </button>
+                      
+                      {/* OS DOIS BOTÕES (GPS e STREET VIEW) */}
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${local.lat},${local.lng}`, '_blank')} 
+                          className="flex-1 py-3 bg-white/5 hover:bg-b-primary/20 text-b-secondary hover:text-white border border-b-primary/30 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 xl:gap-2"
+                        >
+                          <Navigation size={16} /> GPS
+                        </button>
+                        <button 
+                          onClick={() => window.open(`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${local.lat},${local.lng}`, '_blank')} 
+                          className="flex-1 py-3 bg-white/5 hover:bg-b-primary/20 text-b-secondary hover:text-white border border-b-primary/30 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 xl:gap-2"
+                        >
+                          <Eye size={16} /> RUA (360º)
+                        </button>
+                      </div>
+
                     </div>
                   </div>
                 </Popup>

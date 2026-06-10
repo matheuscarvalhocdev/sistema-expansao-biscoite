@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
-import { LogIn, Plus, X, MapPin, Save, LogOut, Search, Navigation, Bell, Eye, EyeOff, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { LogIn, Plus, X, MapPin, Save, LogOut, Search, Navigation, Bell, Eye, EyeOff, AlertCircle, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
-import { locationsData } from './data/locations';
 import L from 'leaflet';
+import { supabase } from './supabase';
 
 // --- LIMITES DA CÂMERA ---
 const brasilBounds = [
@@ -66,14 +66,16 @@ export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  const [locais, setLocais] = useState(locationsData);
+  const [locais, setLocais] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [busca, setBusca] = useState('');
   const [mapCenter, setMapCenter] = useState(null);
   const [mapZoom, setMapZoom] = useState(5);
   const [toast, setToast] = useState({ show: false, title: '', message: '' });
   const [resetTrigger, setResetTrigger] = useState(0);
 
-  // Controle da Gaveta (True = Aberta | False = Fechada)
+  // Controle da Gaveta
   const [isListExpanded, setIsListExpanded] = useState(true);
 
   // Estados Login
@@ -85,6 +87,27 @@ export default function App() {
   const [novoPonto, setNovoPonto] = useState({
     nome: '', cidade: '', regiao: 'Sudeste', tipo: 'Shopping Center', status: 'Disponível', lat: '', lng: ''
   });
+
+  // --- BUSCA OS PONTOS DO SUPABASE AO CARREGAR ---
+  useEffect(() => {
+    const fetchLocais = async () => {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('pontos_expansao')
+        .select('*')
+        .order('id', { ascending: true });
+
+      if (error) {
+        console.error('Erro ao carregar pontos:', error);
+        showNotification('Erro', 'Não foi possível carregar os pontos do mapa.');
+      } else {
+        setLocais(data || []);
+      }
+      setLoading(false);
+    };
+
+    fetchLocais();
+  }, []);
 
   const resetTotem = useCallback(() => {
     setBusca('');
@@ -126,14 +149,40 @@ export default function App() {
     }
   };
 
-  const handleAddPonto = (e) => {
+  // --- SALVA NOVO PONTO NO SUPABASE ---
+  const handleAddPonto = async (e) => {
     e.preventDefault();
-    const pontoFinal = { ...novoPonto, id: locais.length + 1, lat: parseFloat(novoPonto.lat), lng: parseFloat(novoPonto.lng) };
-    setLocais([pontoFinal, ...locais]);
+    setSaving(true);
+
+    const pontoParaSalvar = {
+      nome: novoPonto.nome,
+      cidade: novoPonto.cidade,
+      regiao: novoPonto.regiao,
+      tipo: novoPonto.tipo,
+      status: novoPonto.status,
+      lat: parseFloat(novoPonto.lat),
+      lng: parseFloat(novoPonto.lng),
+    };
+
+    const { data, error } = await supabase
+      .from('pontos_expansao')
+      .insert([pontoParaSalvar])
+      .select()
+      .single();
+
+    setSaving(false);
+
+    if (error) {
+      console.error('Erro ao salvar ponto:', error);
+      showNotification('Erro', 'Não foi possível salvar o ponto.');
+      return;
+    }
+
+    setLocais(prev => [data, ...prev]);
     setShowModal(false);
     setNovoPonto({ nome: '', cidade: '', regiao: 'Sudeste', tipo: 'Shopping Center', status: 'Disponível', lat: '', lng: '' });
-    showNotification("Sucesso", `${pontoFinal.nome} adicionado.`);
-    setMapCenter([pontoFinal.lat, pontoFinal.lng]);
+    showNotification("Sucesso", `${data.nome} adicionado e salvo.`);
+    setMapCenter([data.lat, data.lng]);
     setMapZoom(16);
     setIsListExpanded(false); 
   };
@@ -222,28 +271,36 @@ export default function App() {
           </div>
           
           <div className="overflow-y-auto flex-1 p-4 xl:p-6 space-y-3 touch-pan-y custom-scrollbar border-t border-b-primary/20">
-            {locais.filter(l => l.nome.toLowerCase().includes(busca.toLowerCase()) || l.cidade.toLowerCase().includes(busca.toLowerCase())).map(local => (
-              <div 
-                key={local.id} 
-                onClick={() => handleLocationClick(local)}
-                className="p-4 xl:p-5 border border-b-primary/20 rounded-xl cursor-pointer bg-white/5 hover:bg-white/10 active:bg-b-primary/20 transition-all flex flex-col gap-1 xl:gap-2 group"
-              >
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-[10px] xl:text-[12px] font-bold px-2 xl:px-3 py-1 bg-b-dark text-b-secondary rounded-lg border border-b-primary/30">
-                    {local.regiao}
-                  </span>
-                  <span className="text-[9px] xl:text-[11px] font-bold px-2 xl:px-3 py-1 rounded-lg uppercase tracking-wider" style={{
-                    backgroundColor: local.status === 'Alta Prioridade' ? '#E8439320' : local.status === 'Em Negociação' ? '#E8B84B20' : '#2ecc7120',
-                    color: local.status === 'Alta Prioridade' ? '#E84393' : local.status === 'Em Negociação' ? '#E8B84B' : '#2ecc71',
-                    border: `1px solid ${local.status === 'Alta Prioridade' ? '#E8439350' : local.status === 'Em Negociação' ? '#E8B84B50' : '#2ecc7150'}`
-                  }}>
-                    {local.status}
-                  </span>
-                </div>
-                <h4 className="font-bold text-b-light text-base xl:text-xl group-hover:text-white transition-colors">{local.nome}</h4>
-                <p className="text-xs xl:text-sm text-b-secondary flex items-center gap-1"><MapPin size={14}/> {local.cidade}</p>
+            {/* Estado de carregamento */}
+            {loading ? (
+              <div className="flex flex-col items-center justify-center h-full gap-3 text-b-secondary">
+                <Loader2 size={32} className="animate-spin text-b-primary" />
+                <span className="text-sm font-medium">Carregando pontos...</span>
               </div>
-            ))}
+            ) : (
+              locais.filter(l => l.nome.toLowerCase().includes(busca.toLowerCase()) || l.cidade.toLowerCase().includes(busca.toLowerCase())).map(local => (
+                <div 
+                  key={local.id} 
+                  onClick={() => handleLocationClick(local)}
+                  className="p-4 xl:p-5 border border-b-primary/20 rounded-xl cursor-pointer bg-white/5 hover:bg-white/10 active:bg-b-primary/20 transition-all flex flex-col gap-1 xl:gap-2 group"
+                >
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-[10px] xl:text-[12px] font-bold px-2 xl:px-3 py-1 bg-b-dark text-b-secondary rounded-lg border border-b-primary/30">
+                      {local.regiao}
+                    </span>
+                    <span className="text-[9px] xl:text-[11px] font-bold px-2 xl:px-3 py-1 rounded-lg uppercase tracking-wider" style={{
+                      backgroundColor: local.status === 'Alta Prioridade' ? '#E8439320' : local.status === 'Em Negociação' ? '#E8B84B20' : '#2ecc7120',
+                      color: local.status === 'Alta Prioridade' ? '#E84393' : local.status === 'Em Negociação' ? '#E8B84B' : '#2ecc71',
+                      border: `1px solid ${local.status === 'Alta Prioridade' ? '#E8439350' : local.status === 'Em Negociação' ? '#E8B84B50' : '#2ecc7150'}`
+                    }}>
+                      {local.status}
+                    </span>
+                  </div>
+                  <h4 className="font-bold text-b-light text-base xl:text-xl group-hover:text-white transition-colors">{local.nome}</h4>
+                  <p className="text-xs xl:text-sm text-b-secondary flex items-center gap-1"><MapPin size={14}/> {local.cidade}</p>
+                </div>
+              ))
+            )}
           </div>
         </aside>
 
@@ -291,18 +348,22 @@ export default function App() {
                       
                       {/* OS DOIS BOTÕES (GPS e STREET VIEW) */}
                       <div className="flex gap-2">
-                        <button 
-                          onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${local.lat},${local.lng}`, '_blank')} 
+                        <a
+                          href={`https://www.google.com/maps/dir/?api=1&destination=${local.lat},${local.lng}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
                           className="flex-1 py-3 bg-white/5 hover:bg-b-primary/20 text-b-secondary hover:text-white border border-b-primary/30 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 xl:gap-2"
                         >
                           <Navigation size={16} /> GPS
-                        </button>
-                        <button 
-                          onClick={() => window.open(`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${local.lat},${local.lng}`, '_blank')} 
+                        </a>
+                        <a
+                          href={`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${local.lat},${local.lng}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
                           className="flex-1 py-3 bg-white/5 hover:bg-b-primary/20 text-b-secondary hover:text-white border border-b-primary/30 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 xl:gap-2"
                         >
                           <Eye size={16} /> RUA (360º)
-                        </button>
+                        </a>
                       </div>
 
                     </div>
@@ -360,6 +421,24 @@ export default function App() {
                 <label className="text-xs font-bold text-b-secondary uppercase mb-1 block">Cidade e UF</label>
                 <input required value={novoPonto.cidade} onChange={e => setNovoPonto({...novoPonto, cidade: e.target.value})} type="text" className="w-full p-3 bg-white/5 border border-b-primary/30 text-b-light rounded-xl focus:border-b-secondary" />
               </div>
+              <div>
+                <label className="text-xs font-bold text-b-secondary uppercase mb-1 block">Região</label>
+                <select value={novoPonto.regiao} onChange={e => setNovoPonto({...novoPonto, regiao: e.target.value})} className="w-full p-3 bg-b-dark border border-b-primary/30 text-b-light rounded-xl focus:border-b-secondary">
+                  <option>Norte</option>
+                  <option>Nordeste</option>
+                  <option>Centro-Oeste</option>
+                  <option>Sudeste</option>
+                  <option>Sul</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-bold text-b-secondary uppercase mb-1 block">Tipo</label>
+                <select value={novoPonto.tipo} onChange={e => setNovoPonto({...novoPonto, tipo: e.target.value})} className="w-full p-3 bg-b-dark border border-b-primary/30 text-b-light rounded-xl focus:border-b-secondary">
+                  <option>Shopping Center</option>
+                  <option>Loja de Rua</option>
+                  <option>Ponto Estratégico</option>
+                </select>
+              </div>
               <div className="col-span-1 xl:col-span-2">
                 <label className="text-xs font-bold text-b-secondary uppercase mb-1 block">Status Estratégico</label>
                 <select value={novoPonto.status} onChange={e => setNovoPonto({...novoPonto, status: e.target.value})} className="w-full p-3 bg-b-dark border border-b-primary/30 text-b-light rounded-xl focus:border-b-secondary">
@@ -370,15 +449,20 @@ export default function App() {
               </div>
               <div>
                 <label className="text-xs font-bold text-b-secondary uppercase mb-1 block">Latitude</label>
-                <input required value={novoPonto.lat} onChange={e => setNovoPonto({...novoPonto, lat: e.target.value})} type="text" className="w-full p-3 bg-white/5 border border-b-primary/30 text-b-light rounded-xl focus:border-b-secondary" />
+                <input required value={novoPonto.lat} onChange={e => setNovoPonto({...novoPonto, lat: e.target.value})} type="text" placeholder="-23.561" className="w-full p-3 bg-white/5 border border-b-primary/30 text-b-light rounded-xl focus:border-b-secondary" />
               </div>
               <div>
                 <label className="text-xs font-bold text-b-secondary uppercase mb-1 block">Longitude</label>
-                <input required value={novoPonto.lng} onChange={e => setNovoPonto({...novoPonto, lng: e.target.value})} type="text" className="w-full p-3 bg-white/5 border border-b-primary/30 text-b-light rounded-xl focus:border-b-secondary" />
+                <input required value={novoPonto.lng} onChange={e => setNovoPonto({...novoPonto, lng: e.target.value})} type="text" placeholder="-46.656" className="w-full p-3 bg-white/5 border border-b-primary/30 text-b-light rounded-xl focus:border-b-secondary" />
               </div>
               <div className="col-span-1 xl:col-span-2 pt-2">
-                <button type="submit" className="w-full bg-b-primary text-b-dark p-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-b-secondary transition-all shadow-lg">
-                  <Save size={20} /> ADICIONAR
+                <button 
+                  type="submit" 
+                  disabled={saving}
+                  className="w-full bg-b-primary text-b-dark p-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-b-secondary transition-all shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {saving ? <Loader2 size={20} className="animate-spin" /> : <Save size={20} />}
+                  {saving ? 'SALVANDO...' : 'ADICIONAR'}
                 </button>
               </div>
             </form>
